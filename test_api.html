@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FDA/DrugBank Test</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <h1>FDA/DrugBank API Test</h1>
+        
+        <div style="margin: 20px 0;">
+            <button onclick="testAPI('paracetamol')" class="btn btn-primary">
+                <i class="fas fa-search"></i> Test Paracetamol
+            </button>
+            
+            <button onclick="testAPI('amoxicillin')" class="btn btn-primary">
+                <i class="fas fa-search"></i> Test Amoxicillin
+            </button>
+            
+            <button onclick="testAPI('aspirin')" class="btn btn-primary">
+                <i class="fas fa-search"></i> Test Aspirin
+            </button>
+        </div>
+        
+        <div id="results" style="margin: 20px 0; padding: 20px; background: #f8f9fa; border-radius: 8px;">
+            <p>Click a button to test the API</p>
+        </div>
+    </div>
+
+    <script src="js/fda-lookup.js"></script>
+    <script>
+        function testAPI(medication) {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<p>Testing API for: ' + medication + '</p>';
+            
+            // Direct API test
+            fetch('api/fda-lookup.php?medication=' + encodeURIComponent(medication))
+                .then(response => {
+                    console.log('Response status:', response.status);
+                    return response.text();
+                })
+                .then(text => {
+                    console.log('Raw response:', text);
+                    resultsDiv.innerHTML = '<h3>Raw Response:</h3><pre>' + text + '</pre>';
+                    
+                    try {
+                        const data = JSON.parse(text);
+                        resultsDiv.innerHTML += '<h3>Parsed JSON:</h3><pre>' + JSON.stringify(data, null, 2) + '</pre>';
+                    } catch (e) {
+                        resultsDiv.innerHTML += '<p style="color: red;">Failed to parse JSON: ' + e.message + '</p>';
+                    }
+                })
+                .catch(error => {
+                    console.error('Fetch error:', error);
+                    resultsDiv.innerHTML = '<p style="color: red;">Error: ' + error.message + '</p>';
+                });
+        }
+        
+        function testModal(medication) {
+            lookupDrugInfo(medication);
+        }
+    </script>
+</body>
+</html>
