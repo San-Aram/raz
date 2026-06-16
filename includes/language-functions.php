@@ -37,28 +37,55 @@ function setLanguage($lang) {
     return false;
 }
 
+// Load one language file plus optional project overrides.
+function loadLanguageData($lang) {
+    $filePath = __DIR__ . '/lang-' . $lang . '.php';
+
+    if (!file_exists($filePath)) {
+        $filePath = __DIR__ . '/lang-' . DEFAULT_LANGUAGE . '.php';
+    }
+
+    $translations = include $filePath;
+    $overridePath = __DIR__ . '/lang-overrides.php';
+
+    if (file_exists($overridePath)) {
+        $overrides = include $overridePath;
+        if (isset($overrides[$lang]) && is_array($overrides[$lang])) {
+            $translations = array_replace_recursive($translations, $overrides[$lang]);
+        }
+    }
+
+    return $translations;
+}
+
 // Load language file
 function loadLanguageFile($lang = null) {
     if ($lang === null) {
         $lang = getCurrentLanguage();
     }
-    
-    $filePath = __DIR__ . '/lang-' . $lang . '.php';
-    
-    if (!file_exists($filePath)) {
-        $filePath = __DIR__ . '/lang-en.php';
+
+    $translations = loadLanguageData($lang);
+
+    // Missing keys in translated files should fall back to readable English,
+    // not leak raw keys like admin.viewLogs into the UI.
+    if ($lang !== DEFAULT_LANGUAGE) {
+        $translations = array_replace_recursive(loadLanguageData(DEFAULT_LANGUAGE), $translations);
     }
-    
-    return include $filePath;
+
+    return $translations;
 }
 
 // Get translation
 function t($key, $default = '') {
-    static $translations = null;
-    
-    if ($translations === null) {
-        $translations = loadLanguageFile();
+    static $translationsByLanguage = [];
+
+    $language = getCurrentLanguage();
+
+    if (!isset($translationsByLanguage[$language])) {
+        $translationsByLanguage[$language] = loadLanguageFile($language);
     }
+
+    $translations = $translationsByLanguage[$language];
     
     // Support nested keys with dot notation (e.g., 'header.home')
     $keys = explode('.', $key);
@@ -68,11 +95,20 @@ function t($key, $default = '') {
         if (is_array($value) && isset($value[$k])) {
             $value = $value[$k];
         } else {
-            return $default ?: $key;
+            return $default ?: humanizeTranslationKey($key);
         }
     }
     
-    return $value ?: ($default ?: $key);
+    return $value ?: ($default ?: humanizeTranslationKey($key));
+}
+
+// Final safety net for missing translations.
+function humanizeTranslationKey($key) {
+    $parts = explode('.', $key);
+    $label = end($parts);
+    $label = str_replace(['_', '-'], ' ', $label);
+    $label = preg_replace('/(?<!^)[A-Z]/', ' $0', $label);
+    return ucwords(trim($label));
 }
 
 // Get language name

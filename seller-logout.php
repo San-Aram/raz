@@ -1,6 +1,13 @@
 <?php
 session_start();
 
+if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'seller') {
+    require_once 'includes/admin-settings-helper.php';
+    logAuditEvent('seller_logout', 'users', $_SESSION['user_id'], null, [
+        'logout_time' => date('Y-m-d H:i:s')
+    ], $_SESSION['user_id'], $_SESSION['username'] ?? 'unknown');
+}
+
 // Clear all session variables
 $_SESSION = array();
 
@@ -17,6 +24,6 @@ if (ini_get("session.use_cookies")) {
 session_destroy();
 
 // Redirect to seller login
-header('Location: seller-login.php');
+header('Location: login.php');
 exit;
 ?>

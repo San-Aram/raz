@@ -15,6 +15,7 @@ $error = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     require_once 'includes/database.php';
+    require_once 'includes/admin-settings-helper.php';
     
     $username = trim($_POST['username'] ?? '');
     $password = trim($_POST['password'] ?? '');
@@ -34,10 +35,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['username'] = $user['username'];
             $_SESSION['user_role'] = $user['role'];
             $_SESSION['full_name'] = $user['full_name'] ?? $user['username'];
+
+            logAuditEvent('seller_login_success', 'users', $user['id'], null, [
+                'role' => $user['role']
+            ], $user['id'], $user['username']);
             
             header('Location: seller-dashboard.php');
             exit;
         } else {
+            logAuditEvent('seller_login_failed', 'users', null, null, [
+                'username' => $username
+            ], null, $username);
             $error = 'Invalid credentials or you do not have seller access.';
         }
     }
