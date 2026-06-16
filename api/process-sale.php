@@ -1,6 +1,7 @@
 <?php
 require_once '../includes/seller-auth.php';
 require_once '../includes/database.php';
+require_once '../includes/admin-settings-helper.php';
 
 header('Content-Type: application/json');
 
@@ -116,6 +117,19 @@ try {
 
         // Commit transaction
         $db->commit();
+
+        logAuditEvent('seller_sale_completed', 'sales', $saleId, null, [
+            'sale_number' => $input['sale_number'],
+            'payment_method' => $input['payment_method'],
+            'subtotal' => floatval($input['subtotal']),
+            'discount_amount' => floatval($input['discount_amount'] ?? 0),
+            'tax_amount' => floatval($input['tax_amount']),
+            'total_amount' => floatval($input['total_amount']),
+            'item_count' => count($input['items']),
+            'total_quantity' => array_sum(array_map(function ($item) {
+                return intval($item['quantity'] ?? 0);
+            }, $input['items']))
+        ], $_SESSION['user_id'], $_SESSION['username'] ?? null);
 
         echo json_encode([
             'success' => true,

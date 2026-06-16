@@ -1,5 +1,5 @@
 <?php
-require_once 'database.php';
+require_once __DIR__ . '/database.php';
 
 // Get setting value from database or return default
 function getSystemSetting($key, $default = '') {
@@ -115,6 +115,25 @@ function logAuditEvent($action, $tableName = null, $recordId = null, $oldValues 
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
             )
         ");
+
+        $columns = $db->query("SHOW COLUMNS FROM audit_logs")->fetchAll(PDO::FETCH_ASSOC);
+        $columnNames = array_column($columns, 'Field');
+
+        $optionalColumns = [
+            'username' => "ALTER TABLE audit_logs ADD COLUMN username VARCHAR(255) NULL AFTER user_id",
+            'table_name' => "ALTER TABLE audit_logs ADD COLUMN table_name VARCHAR(50) NULL AFTER action",
+            'record_id' => "ALTER TABLE audit_logs ADD COLUMN record_id INT NULL AFTER table_name",
+            'old_values' => "ALTER TABLE audit_logs ADD COLUMN old_values TEXT NULL AFTER record_id",
+            'new_values' => "ALTER TABLE audit_logs ADD COLUMN new_values TEXT NULL AFTER old_values",
+            'created_at' => "ALTER TABLE audit_logs ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+        ];
+
+        foreach ($optionalColumns as $column => $sql) {
+            if (!in_array($column, $columnNames)) {
+                $db->exec($sql);
+                $columnNames[] = $column;
+            }
+        }
         
         // If user_id not provided, try to get from session
         if ($userId === null) {
@@ -133,22 +152,55 @@ function logAuditEvent($action, $tableName = null, $recordId = null, $oldValues 
                 $username = $_SESSION['admin_username'];
             }
         }
-        
-        // Insert audit log
-        $stmt = $db->prepare("
-            INSERT INTO audit_logs (user_id, username, action, table_name, record_id, old_values, new_values, created_at) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
-        ");
-        
-        return $stmt->execute([
-            $userId,
-            $username,
-            $action,
-            $tableName,
-            $recordId,
-            $oldValues ? json_encode($oldValues) : null,
-            $newValues ? json_encode($newValues) : null
-        ]);
+
+        $userRole = $_SESSION['user_role'] ?? null;
+        if ($userRole === null && isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] === true) {
+            $userRole = 'admin';
+        }
+
+        $oldValuesJson = $oldValues ? json_encode($oldValues) : null;
+        $newValuesJson = $newValues ? json_encode($newValues) : null;
+
+        $data = [];
+        if (in_array('user_id', $columnNames)) {
+            $data['user_id'] = $userId;
+        }
+        if (in_array('username', $columnNames)) {
+            $data['username'] = $username;
+        }
+        if (in_array('user_role', $columnNames)) {
+            $data['user_role'] = $userRole ?? 'unknown';
+        }
+        if (in_array('action', $columnNames)) {
+            $data['action'] = $action;
+        }
+        if (in_array('table_name', $columnNames)) {
+            $data['table_name'] = $tableName;
+        }
+        if (in_array('table_affected', $columnNames)) {
+            $data['table_affected'] = $tableName;
+        }
+        if (in_array('record_id', $columnNames)) {
+            $data['record_id'] = $recordId;
+        }
+        if (in_array('old_values', $columnNames)) {
+            $data['old_values'] = $oldValuesJson;
+        }
+        if (in_array('new_values', $columnNames)) {
+            $data['new_values'] = $newValuesJson;
+        }
+        if (in_array('ip_address', $columnNames)) {
+            $data['ip_address'] = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+        }
+        if (in_array('user_agent', $columnNames)) {
+            $data['user_agent'] = $_SERVER['HTTP_USER_AGENT'] ?? 'unknown';
+        }
+
+        $columnsSql = implode(', ', array_keys($data)) . ', created_at';
+        $placeholdersSql = implode(', ', array_fill(0, count($data), '?')) . ', NOW()';
+        $stmt = $db->prepare("INSERT INTO audit_logs ($columnsSql) VALUES ($placeholdersSql)");
+
+        return $stmt->execute(array_values($data));
     } catch (Exception $e) {
         error_log("Audit logging error: " . $e->getMessage());
         return false;
