@@ -401,7 +401,7 @@ $aiRecommendations = generateAIRecommendations($topProducts, $categoryStats, $da
 
             <!-- AI Recommendations -->
             <div class="ai-recommendations">
-                <h3><i class="fas fa-robot"></i> AI-Powered Recommendations</h3>
+                <h3><i class="fas fa-robot"></i>  Recommendations</h3>
                 <div class="recommendations-grid">
                     <?php foreach ($aiRecommendations as $rec): ?>
                         <div class="recommendation-card recommendation-<?php echo $rec['type']; ?>">

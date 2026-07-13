@@ -7,6 +7,8 @@ class CheckoutSystem {
         this.discountAmount = 0;
         this.paymentMethod = 'cash';
         this.scanner = null;
+        this.currentStream = null;
+        this.isBarcodeLookupInProgress = false;
         
         this.init();
     }
@@ -26,15 +28,36 @@ class CheckoutSystem {
         });
 
         // Barcode entry
-        document.getElementById('barcodeInput').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                this.processBarcodeEntry(e.target.value);
-            }
-        });
+        const manualBarcodeInput = document.getElementById('manualBarcode') || document.getElementById('barcodeInput');
+        if (manualBarcodeInput) {
+            manualBarcodeInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    this.processBarcodeEntry(e.target.value, { autoAdd: true });
+                }
+            });
+        }
 
         document.getElementById('scanBarcodeBtn').addEventListener('click', () => {
             this.openBarcodeScanner();
         });
+
+        const cameraInput = document.getElementById('camera-input');
+        const galleryInput = document.getElementById('gallery-input');
+        if (cameraInput) {
+            cameraInput.addEventListener('change', function() {
+                if (this.files && this.files[0] && galleryInput) {
+                    galleryInput.value = '';
+                }
+            });
+        }
+        if (galleryInput) {
+            galleryInput.addEventListener('change', function() {
+                if (this.files && this.files[0] && cameraInput) {
+                    cameraInput.value = '';
+                }
+            });
+        }
 
         // Product search
         document.getElementById('productSearch').addEventListener('input', (e) => {
@@ -79,17 +102,19 @@ class CheckoutSystem {
             this.closeBarcodeScanner();
         });
 
-        document.getElementById('closeScannerBtn2').addEventListener('click', () => {
-            this.closeBarcodeScanner();
-        });
+        const startScannerBtn = document.getElementById('startScannerBtn');
+        if (startScannerBtn) {
+            startScannerBtn.addEventListener('click', () => {
+                this.startScanner();
+            });
+        }
 
-        document.getElementById('startScannerBtn').addEventListener('click', () => {
-            this.startScanner();
-        });
-
-        document.getElementById('stopScannerBtn').addEventListener('click', () => {
-            this.stopScanner();
-        });
+        const stopScannerBtn = document.getElementById('stopScannerBtn');
+        if (stopScannerBtn) {
+            stopScannerBtn.addEventListener('click', () => {
+                this.stopScanner();
+            });
+        }
 
         // Modal close on outside click
         document.getElementById('barcodeModal').addEventListener('click', (e) => {
@@ -162,7 +187,10 @@ class CheckoutSystem {
         // Focus appropriate input
         setTimeout(() => {
             if (tabName === 'barcode') {
-                document.getElementById('barcodeInput').focus();
+                const barcodeInput = document.getElementById('manualBarcode') || document.getElementById('barcodeInput');
+                if (barcodeInput) {
+                    barcodeInput.focus();
+                }
             } else if (tabName === 'search') {
                 document.getElementById('productSearch').focus();
             } else if (tabName === 'manual') {
@@ -171,12 +199,15 @@ class CheckoutSystem {
         }, 100);
     }
 
-    async processBarcodeEntry(barcode) {
+    async processBarcodeEntry(barcode, options = {}) {
+        const autoAdd = options.autoAdd === true;
         if (!barcode.trim()) return;
 
         const resultDiv = document.getElementById('barcodeResult');
-        resultDiv.style.display = 'block';
-        resultDiv.innerHTML = '<div class="loading"><i class="fas fa-spinner fa-spin"></i> Looking up product...</div>';
+        if (resultDiv) {
+            resultDiv.style.display = 'block';
+            resultDiv.innerHTML = '<div class="loading"><i class="fas fa-spinner fa-spin"></i> Looking up product...</div>';
+        }
 
         try {
             const response = await fetch('api/check-barcode.php', {
@@ -190,35 +221,71 @@ class CheckoutSystem {
             const data = await response.json();
 
             if (data.success && data.product) {
-                this.displayProductResult(data.product, resultDiv);
+                if (autoAdd) {
+                    this.addProductToCart(data.product);
+                    if (resultDiv) {
+                        resultDiv.style.display = 'none';
+                    }
+                } else {
+                    if (resultDiv) {
+                        this.displayProductResult(data.product, resultDiv);
+                    }
+                }
             } else {
-                resultDiv.innerHTML = `
-                    <div class="no-product">
-                        <i class="fas fa-exclamation-triangle"></i>
-                        <p>Product not found</p>
-                        <small>Barcode: ${barcode}</small>
-                        <button type="button" class="btn btn-outline btn-sm" onclick="checkout.switchTab('manual')">
-                            Add Manually
-                        </button>
-                    </div>
-                `;
+                if (resultDiv) {
+                    resultDiv.innerHTML = `
+                        <div class="no-product">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            <p>Product not found</p>
+                            <small>Barcode: ${barcode}</small>
+                            <button type="button" class="btn btn-outline btn-sm" onclick="checkout.switchTab('manual')">
+                                Add Manually
+                            </button>
+                        </div>
+                    `;
+                } else {
+                    this.showAlert('Product not found', 'error');
+                }
             }
+
+            this.clearBarcodeInputs();
+            return data;
         } catch (error) {
             console.error('Barcode lookup error:', error);
-            resultDiv.innerHTML = `
-                <div class="error">
-                    <i class="fas fa-exclamation-triangle"></i>
-                    <p>Error looking up product</p>
-                    <small>Please try again</small>
-                </div>
-            `;
+            if (resultDiv) {
+                resultDiv.innerHTML = `
+                    <div class="error">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <p>Error looking up product</p>
+                        <small>Please try again</small>
+                    </div>
+                `;
+            } else {
+                this.showAlert('Error looking up product', 'error');
+            }
+            this.clearBarcodeInputs();
+            return null;
+        }
+    }
+
+    clearBarcodeInputs() {
+        const manualBarcodeInput = document.getElementById('manualBarcode') || document.getElementById('barcodeInput');
+        if (manualBarcodeInput) {
+            manualBarcodeInput.value = '';
         }
 
-        // Clear barcode input for next scan
-        document.getElementById('barcodeInput').value = '';
+        const cameraInput = document.getElementById('camera-input');
+        const galleryInput = document.getElementById('gallery-input');
+        if (cameraInput) {
+            cameraInput.value = '';
+        }
+        if (galleryInput) {
+            galleryInput.value = '';
+        }
     }
 
     displayProductResult(product, container) {
+        const availableStock = typeof product.stock_quantity === 'number' ? product.stock_quantity : 999;
         container.innerHTML = `
             <div class="product-result">
                 <div class="product-info">
@@ -229,12 +296,12 @@ class CheckoutSystem {
                         ${product.size ? ` | Size: ${product.size}` : ''}
                     </p>
                     <p class="product-price">₱${parseFloat(product.price).toFixed(2)}</p>
-                    <p class="product-stock">Stock: ${product.stock_quantity || 0} available</p>
+                    <p class="product-stock">Stock: ${typeof product.stock_quantity === 'number' ? product.stock_quantity : 0} available</p>
                 </div>
                 <div class="add-controls">
                     <div class="quantity-input-group">
                         <label>Quantity:</label>
-                        <input type="number" id="productQuantity" value="1" min="1" max="${product.stock_quantity || 999}" class="form-control">
+                        <input type="number" id="productQuantity" value="1" min="1" max="${availableStock}" class="form-control">
                     </div>
                     <button type="button" class="btn btn-primary" onclick="checkout.addProductToCart(${JSON.stringify(product).replace(/"/g, '&quot;')})">
                         <i class="fas fa-plus"></i> Add to Cart
@@ -332,11 +399,14 @@ class CheckoutSystem {
     }
 
     addProductToCart(product) {
-        const quantity = document.getElementById('productQuantity') ? 
-            parseInt(document.getElementById('productQuantity').value) || 1 : 
-            product.quantity || 1;
+        const quantityInput = document.getElementById('productQuantity');
+        const quantity = quantityInput ?
+            (parseInt(quantityInput.value, 10) || 1) :
+            (product.quantity || 1);
 
-        if (quantity > (product.stock_quantity || 999)) {
+        const availableStock = typeof product.stock_quantity === 'number' ? product.stock_quantity : 999;
+
+        if (quantity > availableStock) {
             this.showAlert('Quantity exceeds available stock', 'error');
             return;
         }
@@ -347,7 +417,7 @@ class CheckoutSystem {
         if (existingIndex >= 0) {
             // Update quantity of existing item
             const newQuantity = this.cart[existingIndex].quantity + quantity;
-            if (newQuantity > (product.stock_quantity || 999)) {
+            if (newQuantity > availableStock) {
                 this.showAlert('Total quantity would exceed available stock', 'error');
                 return;
             }
@@ -383,7 +453,7 @@ class CheckoutSystem {
         if (item) {
             if (newQuantity <= 0) {
                 this.removeFromCart(cartId);
-            } else if (newQuantity <= (item.stock_quantity || 999)) {
+            } else if (newQuantity <= (typeof item.stock_quantity === 'number' ? item.stock_quantity : 999)) {
                 item.quantity = newQuantity;
                 this.updateCartDisplay();
             } else {
@@ -421,7 +491,7 @@ class CheckoutSystem {
                             <button class="quantity-btn" onclick="checkout.updateCartQuantity(${item.cartId}, ${item.quantity - 1})">-</button>
                             <input type="number" class="quantity-input" value="${item.quantity}" 
                                    onchange="checkout.updateCartQuantity(${item.cartId}, parseInt(this.value))"
-                                   min="1" max="${item.stock_quantity || 999}">
+                                   min="1" max="${typeof item.stock_quantity === 'number' ? item.stock_quantity : 999}">
                             <button class="quantity-btn" onclick="checkout.updateCartQuantity(${item.cartId}, ${item.quantity + 1})">+</button>
                         </div>
                         <div class="item-total">₱${(item.price * item.quantity).toFixed(2)}</div>
@@ -674,7 +744,7 @@ class CheckoutSystem {
         this.discountAmount = 0;
         
         // Reset forms
-        document.getElementById('barcodeInput').value = '';
+        this.clearBarcodeInputs();
         document.getElementById('productSearch').value = '';
         document.getElementById('manualProduct').value = '';
         document.getElementById('manualPrice').value = '';
@@ -684,7 +754,10 @@ class CheckoutSystem {
         document.getElementById('cashReceived').value = '';
         
         // Reset UI
-        document.getElementById('barcodeResult').style.display = 'none';
+        const barcodeResult = document.getElementById('barcodeResult');
+        if (barcodeResult) {
+            barcodeResult.style.display = 'none';
+        }
         document.getElementById('searchResults').innerHTML = '';
         this.updateCartDisplay();
         
@@ -693,7 +766,10 @@ class CheckoutSystem {
         
         // Focus barcode input
         this.switchTab('barcode');
-        document.getElementById('barcodeInput').focus();
+        const barcodeInput = document.getElementById('manualBarcode') || document.getElementById('barcodeInput');
+        if (barcodeInput) {
+            barcodeInput.focus();
+        }
         
         this.showAlert('Ready for next sale', 'info');
     }
@@ -777,7 +853,12 @@ class CheckoutSystem {
             this.stopScanner();
         }
 
-        const scannerContainer = document.getElementById('scanner');
+        const scannerVideo = document.getElementById('scanner');
+        if (!scannerVideo) {
+            this.showAlert('Scanner video element not found', 'error');
+            return;
+        }
+        scannerVideo.muted = true;
         
         // Check if HTTPS is required for camera access
         if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
@@ -785,22 +866,23 @@ class CheckoutSystem {
             return;
         }
 
-        // Check for camera permissions first
         try {
-            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-                const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { 
-                        facingMode: "environment",
-                        width: { ideal: 640, max: 1280 },
-                        height: { ideal: 480, max: 720 }
-                    } 
-                });
-                
-                // Stop the test stream
-                stream.getTracks().forEach(track => track.stop());
-            } else {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
                 throw new Error('Camera API not supported');
             }
+
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    facingMode: 'environment',
+                    width: { ideal: 1280, max: 1920 },
+                    height: { ideal: 720, max: 1080 }
+                },
+                audio: false
+            });
+
+            this.currentStream = stream;
+            scannerVideo.srcObject = stream;
+            await scannerVideo.play();
         } catch (error) {
             console.error('Camera permission error:', error);
             let errorMessage = 'Camera access denied or not available';
@@ -822,7 +904,7 @@ class CheckoutSystem {
             inputStream: {
                 name: "Live",
                 type: "LiveStream",
-                target: scannerContainer,
+                target: scannerVideo,
                 constraints: {
                     width: { min: 640, ideal: 1280, max: 1920 },
                     height: { min: 480, ideal: 720, max: 1080 },
@@ -887,8 +969,14 @@ class CheckoutSystem {
                 Quagga.start();
                 this.scanner = true;
                 
-                document.getElementById('startScannerBtn').style.display = 'none';
-                document.getElementById('stopScannerBtn').style.display = 'inline-block';
+                const startScannerBtn = document.getElementById('startScannerBtn');
+                const stopScannerBtn = document.getElementById('stopScannerBtn');
+                if (startScannerBtn) {
+                    startScannerBtn.style.display = 'none';
+                }
+                if (stopScannerBtn) {
+                    stopScannerBtn.style.display = 'inline-block';
+                }
                 
                 this.showAlert('Scanner started - point camera at barcode', 'info');
             } catch (startError) {
@@ -903,14 +991,37 @@ class CheckoutSystem {
             console.log('Barcode detected:', code);
             
             // Add some validation to ensure we have a valid barcode
-            if (code && code.length >= 8) {
+            if (code && code.length >= 8 && !this.isBarcodeLookupInProgress) {
+                this.isBarcodeLookupInProgress = true;
+                this.clearBarcodeInputs();
+                const scannerStatus = document.getElementById('scannerStatus');
+                if (scannerStatus) {
+                    scannerStatus.textContent = 'Barcode detected. Looking up product...';
+                }
+                const manualBarcodeInput = document.getElementById('manualBarcode') || document.getElementById('barcodeInput');
+                if (manualBarcodeInput) {
+                    manualBarcodeInput.value = code;
+                }
+                
                 // Vibrate if supported
                 if (navigator.vibrate) {
                     navigator.vibrate(200);
                 }
                 
-                this.closeBarcodeScanner();
-                this.processBarcodeEntry(code);
+                this.processBarcodeEntry(code, { autoAdd: true }).then((data) => {
+                    this.isBarcodeLookupInProgress = false;
+
+                    if (data && data.success && data.product) {
+                        this.closeBarcodeScanner();
+                    } else if (scannerStatus) {
+                        scannerStatus.textContent = 'No matching product found. Try another barcode.';
+                    }
+                }).catch(() => {
+                    this.isBarcodeLookupInProgress = false;
+                    if (scannerStatus) {
+                        scannerStatus.textContent = 'Unable to look up barcode. Try again.';
+                    }
+                });
             }
         });
 
@@ -944,10 +1055,91 @@ class CheckoutSystem {
         if (this.scanner) {
             Quagga.stop();
             this.scanner = null;
-            
-            document.getElementById('startScannerBtn').style.display = 'inline-block';
-            document.getElementById('stopScannerBtn').style.display = 'none';
         }
+
+        if (this.currentStream) {
+            this.currentStream.getTracks().forEach(track => track.stop());
+            this.currentStream = null;
+        }
+
+        const scannerVideo = document.getElementById('scanner');
+        if (scannerVideo) {
+            scannerVideo.srcObject = null;
+        }
+    }
+
+    async processBarcodeFromImage() {
+        const cameraInput = document.getElementById('camera-input');
+        const galleryInput = document.getElementById('gallery-input');
+        const imageButton = document.querySelector('.image-upload-btn');
+
+        const file = (cameraInput && cameraInput.files && cameraInput.files[0]) ||
+            (galleryInput && galleryInput.files && galleryInput.files[0]);
+
+        if (!file) {
+            this.showAlert('Please select an image file', 'error');
+            return;
+        }
+
+        const originalText = imageButton ? imageButton.innerHTML : '';
+        if (imageButton) {
+            imageButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Scanning...';
+            imageButton.disabled = true;
+        }
+
+        const img = new Image();
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+
+        img.onload = () => {
+            canvas.width = img.width;
+            canvas.height = img.height;
+            ctx.drawImage(img, 0, 0);
+
+            Quagga.decodeSingle({
+                src: canvas.toDataURL(),
+                numOfWorkers: 0,
+                inputStream: { size: 800 },
+                locator: {
+                    patchSize: 'medium',
+                    halfSample: true
+                },
+                decoder: {
+                    readers: [
+                        'code_128_reader',
+                        'ean_reader',
+                        'ean_8_reader',
+                        'code_39_reader',
+                        'code_39_vin_reader',
+                        'codabar_reader',
+                        'upc_reader',
+                        'upc_e_reader',
+                        'i2of5_reader'
+                    ]
+                }
+            }, (result) => {
+                if (imageButton) {
+                    imageButton.innerHTML = originalText;
+                    imageButton.disabled = false;
+                }
+
+                if (result && result.codeResult && result.codeResult.code) {
+                    this.processBarcodeEntry(result.codeResult.code, { autoAdd: true });
+                } else {
+                    this.showAlert('No barcode found in the image. Please try a clearer image.', 'error');
+                }
+            });
+        };
+
+        img.onerror = () => {
+            if (imageButton) {
+                imageButton.innerHTML = originalText;
+                imageButton.disabled = false;
+            }
+            this.showAlert('Error loading image. Please try again.', 'error');
+        };
+
+        img.src = URL.createObjectURL(file);
     }
 
     updateTime() {
@@ -1021,6 +1213,22 @@ let checkout;
 document.addEventListener('DOMContentLoaded', function() {
     checkout = new CheckoutSystem();
 });
+
+function processBarcode() {
+    if (!checkout) {
+        return;
+    }
+
+    const manualBarcodeInput = document.getElementById('manualBarcode') || document.getElementById('barcodeInput');
+    const barcode = manualBarcodeInput ? manualBarcodeInput.value.trim() : '';
+    checkout.processBarcodeEntry(barcode, { autoAdd: true });
+}
+
+function processBarcodeFromImage() {
+    if (checkout) {
+        checkout.processBarcodeFromImage();
+    }
+}
 
 // Add animation styles
 const style = document.createElement('style');

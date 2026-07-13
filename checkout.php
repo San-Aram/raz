@@ -283,39 +283,49 @@ $autoScan = isset($_GET['scan']) && $_GET['scan'] == '1';
 
     <!-- Barcode Scanner Modal -->
     <div id="barcodeModal" class="modal">
-        <div class="modal-content scanner-modal">
-            <div class="modal-header">
-                <h3><i class="fas fa-barcode"></i> Barcode Scanner</h3>
-                <span class="close" id="closeScannerBtn">&times;</span>
+        <div class="modal-content">
+            <span class="close" id="closeScannerBtn">&times;</span>
+            <h2><i class="fas fa-barcode"></i> Barcode Scanner</h2>
+
+            <div class="mobile-instructions" style="display: none;">
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle"></i>
+                    <strong>Mobile Tips:</strong> Allow camera access when prompted. Hold device steady with good lighting for best results.
+                </div>
             </div>
-            <div class="modal-body">
-                <div class="scanner-instructions">
-                    <div class="instruction-item">
+
+            <div id="scanner-container">
+                <video id="scanner" autoplay playsinline></video>
+                <div class="scanner-overlay">
+                    <div class="scanner-line"></div>
+                </div>
+            </div>
+
+            <div class="image-input">
+                <h3><i class="fas fa-camera"></i> Or scan from image:</h3>
+                <div class="camera-buttons">
+                    <label for="camera-input" class="btn-camera">
                         <i class="fas fa-camera"></i>
-                        <span>Allow camera access when prompted</span>
-                    </div>
-                    <div class="instruction-item">
-                        <i class="fas fa-barcode"></i>
-                        <span>Point camera at barcode to scan</span>
-                    </div>
-                    <div class="instruction-item">
-                        <i class="fas fa-info-circle"></i>
-                        <span>Works best with good lighting</span>
-                    </div>
+                        <span>Take Photo</span>
+                    </label>
+                    <label for="gallery-input" class="btn-gallery">
+                        <i class="fas fa-images"></i>
+                        <span>Choose from Gallery</span>
+                    </label>
                 </div>
-                <div id="scanner" class="scanner-container"></div>
-                <div class="scanner-controls">
-                    <button type="button" id="startScannerBtn" class="btn btn-primary">
-                        <i class="fas fa-play"></i> Start Scanner
-                    </button>
-                    <button type="button" id="stopScannerBtn" class="btn btn-secondary">
-                        <i class="fas fa-stop"></i> Stop Scanner
-                    </button>
-                    <button type="button" id="closeScannerBtn2" class="btn btn-outline">
-                        <i class="fas fa-times"></i> Close
-                    </button>
-                </div>
-                <div class="scanner-status" id="scannerStatus"></div>
+                <input type="file" id="camera-input" accept="image/*" capture="environment" style="display: none;">
+                <input type="file" id="gallery-input" accept="image/*" style="display: none;">
+                <button onclick="processBarcodeFromImage()" class="btn btn-info image-upload-btn" style="margin-top: 1rem;">
+                    <i class="fas fa-search"></i> Scan from Image
+                </button>
+            </div>
+
+            <div class="manual-input">
+                <h3><i class="fas fa-keyboard"></i> Or enter barcode manually:</h3>
+                <input type="text" id="manualBarcode" placeholder="Enter barcode number" inputmode="numeric">
+                <button onclick="processBarcode()" class="btn btn-primary">
+                    <i class="fas fa-search"></i> Process Barcode
+                </button>
             </div>
         </div>
     </div>
@@ -692,67 +702,8 @@ $autoScan = isset($_GET['scan']) && $_GET['scan'] == '1';
             font-weight: 600;
         }
 
-        .scanner-modal {
-            max-width: 700px;
-        }
-
-        .scanner-instructions {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1rem;
-            margin-bottom: 1.5rem;
-        }
-
-        .instruction-item {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            padding: 1rem;
-            background: var(--gray-50);
-            border-radius: var(--border-radius);
-            border-left: 4px solid var(--primary-color);
-        }
-
-        .instruction-item i {
-            color: var(--primary-color);
-            font-size: 1.2rem;
-        }
-
-        .instruction-item span {
-            font-size: 0.9rem;
-            color: var(--gray-700);
-        }
-
-        .scanner-container {
-            width: 100%;
-            height: 350px;
-            background: var(--gray-100);
-            border-radius: var(--border-radius);
-            display: flex;
-            align-items: center;
-            justify-content: center;
+        .mobile-instructions {
             margin-bottom: 1rem;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .scanner-container canvas, .scanner-container video {
-            max-width: 100%;
-            max-height: 100%;
-            border-radius: var(--border-radius);
-        }
-
-        .scanner-status {
-            text-align: center;
-            padding: 0.5rem;
-            font-size: 0.9rem;
-            color: var(--gray-600);
-        }
-
-        .scanner-controls {
-            display: flex;
-            gap: 1rem;
-            justify-content: center;
         }
 
         .payment-processing {
@@ -788,6 +739,10 @@ $autoScan = isset($_GET['scan']) && $_GET['scan'] == '1';
 
             .quick-actions {
                 justify-content: center;
+            }
+
+            .mobile-instructions {
+                display: block !important;
             }
         }
     </style>
