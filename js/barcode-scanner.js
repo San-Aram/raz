@@ -223,11 +223,8 @@ function initQuaggaScanner() {
         // Fill manual input field
         document.getElementById('manualBarcode').value = code;
         
-        // Process the barcode
+        // Process the barcode (do NOT stop scanning here so camera can continue trying)
         processBarcode(code);
-        
-        // Stop scanning after successful detection
-        stopScanning();
     });
 }
 
@@ -331,31 +328,70 @@ function processBarcode(barcode = null) {
                 }, 1000);
                 
             } else {
-                // Product doesn't exist, open form to create new
-                console.log('Product does not exist, opening form for category:', data.category);
-                
-                if (typeof showAlert === 'function') {
-                    try {
-                        showAlert('Product not found. Opening form to add new product...', 'info');
-                    } catch (e) {
-                        console.warn('showAlert failed, using alert fallback:', e);
-                        alert('Product not found. Opening form to add new product...');
+                // Product doesn't exist — show barcode and allow creating while scanner continues
+                console.log('Product does not exist for barcode:', barcodeValue, 'category:', data.category);
+
+                // Ensure a detected-info area exists in the modal
+                let detectedArea = document.getElementById('detectedInfo');
+                if (!detectedArea) {
+                    detectedArea = document.createElement('div');
+                    detectedArea.id = 'detectedInfo';
+                    detectedArea.className = 'detected-info';
+                    // Insert detected area right after manual-input section if possible
+                    const manualInput = document.querySelector('#barcodeModal .manual-input');
+                    if (manualInput && manualInput.parentNode) {
+                        manualInput.parentNode.insertBefore(detectedArea, manualInput.nextSibling);
+                    } else {
+                        const modalContent = document.querySelector('#barcodeModal .modal-content') || document.body;
+                        modalContent.appendChild(detectedArea);
                     }
                 }
-                
-                // Close scanner and open form
-                setTimeout(() => {
-                    closeBarcodeScanner();
-                    setTimeout(() => {
-                        console.log('About to call openNewProductForm with:', barcodeValue, data.category);
+
+                // Populate the detected-info with barcode and create button
+                detectedArea.innerHTML = `
+                    <div class="alert alert-warning" style="margin-top:0.75rem">
+                        Product not found for barcode <strong>${barcodeValue}</strong>.
+                    </div>
+                    <div style="display:flex;gap:0.5rem;margin-top:0.5rem;align-items:center">
+                        <button id="createProductBtn" class="btn btn-success">Create product for ${barcodeValue}</button>
+                        <button id="clearDetectedBtn" class="btn btn-secondary">Clear</button>
+                        <small style="margin-left:0.5rem;color:#666">Scanner remains active to try again.</small>
+                    </div>
+                `;
+
+                // Attach handlers
+                const createBtn = document.getElementById('createProductBtn');
+                if (createBtn) {
+                    createBtn.onclick = function() {
+                        if (isCreatingProduct) return;
+                        isCreatingProduct = true;
                         try {
+                            // Open new product form with the barcode prefilled. Keep scanner running in background.
                             openNewProductForm(barcodeValue, data.category);
                         } catch (error) {
                             console.error('Error opening new product form:', error);
                             alert('Error opening product form: ' + error.message);
+                        } finally {
+                            isCreatingProduct = false;
                         }
-                    }, 200);
-                }, 1000);
+                    };
+                }
+
+                const clearBtn = document.getElementById('clearDetectedBtn');
+                if (clearBtn) {
+                    clearBtn.onclick = function() {
+                        const el = document.getElementById('detectedInfo');
+                        if (el) el.remove();
+                        // Clear manual input but keep scanner running
+                        const manual = document.getElementById('manualBarcode');
+                        if (manual) manual.value = '';
+                    };
+                }
+
+                // Inform user subtly that scanner remains active
+                if (typeof showAlert === 'function') {
+                    try { showAlert('No matching product found — you can create one for this barcode or continue scanning.', 'info'); } catch(e) { /* ignore */ }
+                }
             }
         } else {
             console.log('API returned error:', data.message);
