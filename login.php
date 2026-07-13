@@ -4,10 +4,14 @@ require_once 'includes/database.php';
 require_once 'includes/admin-settings-helper.php';
 
 $error = '';
+$maxLoginAttempts = 5;
+$lockoutDurationMinutes = 15;
 
 // Check for session expired error
 if (isset($_GET['error']) && $_GET['error'] === 'session_expired') {
     $error = 'Your session has expired due to inactivity. Please log in again.';
+    // Clear the session expired cookie
+    setcookie('session_expired', '', time() - 3600, '/');
 }
 
 // Check if already logged in
@@ -16,8 +20,31 @@ if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true) {
     exit;
 }
 
+// Initialize login attempts tracking if not exists
+if (!isset($_SESSION['login_attempts'])) {
+    $_SESSION['login_attempts'] = 0;
+    $_SESSION['login_attempt_time'] = null;
+}
+
+// Check if user is locked out due to too many attempts
+$isLockedOut = false;
+if ($_SESSION['login_attempts'] >= $maxLoginAttempts && $_SESSION['login_attempt_time']) {
+    $timeSinceFirstAttempt = time() - $_SESSION['login_attempt_time'];
+    $lockoutDurationSeconds = $lockoutDurationMinutes * 60;
+    
+    if ($timeSinceFirstAttempt < $lockoutDurationSeconds) {
+        $isLockedOut = true;
+        $minutesRemaining = ceil(($lockoutDurationSeconds - $timeSinceFirstAttempt) / 60);
+        $error = "Too many login attempts. Please try again in {$minutesRemaining} minute(s).";
+    } else {
+        // Reset attempts after lockout period
+        $_SESSION['login_attempts'] = 0;
+        $_SESSION['login_attempt_time'] = null;
+    }
+}
+
 // Handle login form submission
-if ($_POST) {
+if ($_POST && !$isLockedOut) {
     $username = trim($_POST['username'] ?? '');
     $password = $_POST['password'] ?? '';
     
@@ -44,6 +71,10 @@ if ($_POST) {
                     $_SESSION['user_role'] = $user['role'];
                     $_SESSION['user_login_time'] = time();
                     
+                    // Reset login attempts on successful login
+                    $_SESSION['login_attempts'] = 0;
+                    $_SESSION['login_attempt_time'] = null;
+                    
                     // Log successful login
                     logAuditEvent('user_login_success', 'users', $user['id'], null, ['role' => $user['role']], $user['id'], $user['username']);
                     
@@ -59,8 +90,18 @@ if ($_POST) {
                     logAuditEvent('login_attempt_access_denied', 'users', $user['id'], null, ['role' => $user['role']], $user['id'], $user['username']);
                 }
             } else {
-                $error = 'Invalid username or password';
-                logAuditEvent('login_attempt_failed', null, null, ['username' => $username], null, null, $username);
+                $_SESSION['login_attempts']++;
+                if (!$_SESSION['login_attempt_time']) {
+                    $_SESSION['login_attempt_time'] = time();
+                }
+                
+                if ($_SESSION['login_attempts'] >= $maxLoginAttempts) {
+                    $error = "Too many login attempts. Please try again in {$lockoutDurationMinutes} minute(s).";
+                } else {
+                    $attemptsRemaining = $maxLoginAttempts - $_SESSION['login_attempts'];
+                    $error = "Invalid username or password ({$attemptsRemaining} attempt(s) remaining)";
+                }
+                logAuditEvent('login_attempt_failed', null, null, ['username' => $username, 'attempts' => $_SESSION['login_attempts']], null, null, $username);
             }
         } catch (Exception $e) {
             $error = 'Login error: ' . $e->getMessage();

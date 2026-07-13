@@ -29,8 +29,8 @@ function checkUserSessionTimeout() {
         
         // If session has expired
         if ($sessionAge > $sessionTimeoutSeconds) {
-            // Set flag to indicate session expired due to timeout
-            $_SESSION['session_expired'] = true;
+            // Set a cookie to indicate session expired (since we'll destroy the session)
+            setcookie('session_expired', '1', time() + 3600, '/');
             // Clear session
             session_unset();
             session_destroy();
@@ -67,14 +67,14 @@ if ($isAdminLoggedIn) {
     // Neither admin nor manager is logged in
     $currentPage = $_SERVER['REQUEST_URI'];
     
-    // Check if session expired due to timeout
-    $sessionExpired = isset($_SESSION['session_expired']) ? $_SESSION['session_expired'] : false;
+    // Check if session expired due to timeout (using cookie since session is destroyed)
+    $sessionExpired = isset($_COOKIE['session_expired']) ? $_COOKIE['session_expired'] : false;
     
     // Redirect to appropriate login based on the requested page
     if (strpos($_SERVER['REQUEST_URI'], 'admin-') === 0) {
         header('Location: admin-login.php?redirect=' . urlencode($currentPage));
     } else {
-        $errorParam = $sessionExpired ? '&error=session_expired' : '';
+        $errorParam = $sessionExpired ? '?error=session_expired' : '';
         header('Location: login.php?redirect=' . urlencode($currentPage) . $errorParam);
     }
     exit;

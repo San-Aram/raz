@@ -98,7 +98,37 @@ try {
                 }
             }
             break;
-            
+
+        case 'update_price':
+            $newPrice = floatval($values['price'] ?? -1);
+            if ($newPrice < 0) {
+                echo json_encode(['success' => false, 'message' => 'Price must be non-negative']);
+                exit;
+            }
+
+            foreach ($items as $item) {
+                $category = $item['category'];
+                $itemId = intval($item['id']);
+
+                try {
+                    if ($category === 'products') {
+                        $stmt = $db->prepare("UPDATE products SET price = ? WHERE id = ?");
+                    } elseif ($category === 'cosmetics') {
+                        $stmt = $db->prepare("UPDATE cosmetics SET price = ? WHERE id = ?");
+                    } elseif ($category === 'dental') {
+                        $stmt = $db->prepare("UPDATE dental SET price = ? WHERE id = ?");
+                    } else {
+                        continue;
+                    }
+
+                    $stmt->execute([$newPrice, $itemId]);
+                    $updatedCount++;
+                } catch (Exception $e) {
+                    $errors[] = "Error updating price for {$category} item {$itemId}: " . $e->getMessage();
+                }
+            }
+            break;
+
         case 'update_expiry':
             $newExpiryDate = $values['expiry_date'] ?? '';
             if (empty($newExpiryDate)) {

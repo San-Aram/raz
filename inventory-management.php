@@ -380,9 +380,7 @@ $actionItems = [
                     <button onclick="window.location.href='statistics.php'" class="btn btn-info">
                         <i class="fas fa-chart-line"></i> <?php echo t('inventory.view_reports', 'View Reports'); ?>
                     </button>
-                    <button onclick="exportInventory()" class="btn btn-secondary">
-                        <i class="fas fa-download"></i> <?php echo t('inventory.export_data', 'Export Data'); ?>
-                    </button>
+                    
                     <button onclick="showBulkUpdateModal(event)" class="btn btn-warning">
                         <i class="fas fa-edit"></i> <?php echo t('inventory.bulk_update', 'Bulk Update'); ?>
                     </button>
@@ -409,6 +407,7 @@ $actionItems = [
                             <option value=""><?php echo t('inventory.choose_action', 'Choose action...'); ?></option>
                             <option value="update_quantity"><?php echo t('inventory.set_quantity', 'Set Quantity'); ?></option>
                             <option value="adjust_quantity"><?php echo t('inventory.adjust_quantity', 'Adjust Quantity (+/-)'); ?></option>
+                            <option value="update_price"><?php echo t('inventory.update_price', 'Update Price'); ?></option>
                             <option value="update_expiry"><?php echo t('inventory.update_expiry', 'Update Expiry Date'); ?></option>
                             <option value="update_threshold"><?php echo t('inventory.set_threshold', 'Set Low Stock Threshold'); ?></option>
                         </select>
@@ -431,6 +430,7 @@ $actionItems = [
                                 <th><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll()"></th>
                                 <th>Name</th>
                                 <th>Category</th>
+                                <th>Current Price</th>
                                 <th>Current Quantity</th>
                                 <th>Expiry Date</th>
                                 <th>Low Stock Threshold</th>
@@ -1233,9 +1233,9 @@ $actionItems = [
 
             // Mock some data for demonstration
             const mockItems = [
-                { id: 1, name: 'Paracetamol 500mg', category: 'products', quantity: 50, expiry_date: '2025-06-15', low_stock_threshold: 10 },
-                { id: 2, name: 'Vitamin C Serum', category: 'cosmetics', quantity: 25, expiry_date: '2025-08-20', low_stock_threshold: 5 },
-                { id: 3, name: 'Dental Floss', category: 'dental', quantity: 100, expiry_date: '2026-01-10', low_stock_threshold: 15 }
+                { id: 1, name: 'Paracetamol 500mg', category: 'products', price: 3.50, quantity: 50, expiry_date: '2025-06-15', low_stock_threshold: 10 },
+                { id: 2, name: 'Vitamin C Serum', category: 'cosmetics', price: 12.99, quantity: 25, expiry_date: '2025-08-20', low_stock_threshold: 5 },
+                { id: 3, name: 'Dental Floss', category: 'dental', price: 2.25, quantity: 100, expiry_date: '2026-01-10', low_stock_threshold: 15 }
             ];
 
             allItems = allItems.length > 0 ? allItems : mockItems;
@@ -1260,6 +1260,7 @@ $actionItems = [
                     <td><input type="checkbox" class="item-checkbox" data-id="${item.id}" data-category="${item.category}" onchange="updateSelectedCount()"></td>
                     <td>${item.name}</td>
                     <td><span class="category-badge category-${item.category}">${item.category}</span></td>
+                    <td>${Number(item.price || 0).toFixed(2)}</td>
                     <td>${item.quantity}</td>
                     <td>${item.expiry_date || 'N/A'}</td>
                     <td>${item.low_stock_threshold}</td>
@@ -1323,6 +1324,12 @@ $actionItems = [
                         <input type="number" id="quantityAdjustment" placeholder="e.g., +10 or -5" class="form-control">
                     `;
                     break;
+                case 'update_price':
+                    inputsContainer.innerHTML = `
+                        <label>New Price:</label>
+                        <input type="number" id="newPrice" min="0" step="0.01" placeholder="Enter new price" class="form-control">
+                    `;
+                    break;
                 case 'update_expiry':
                     inputsContainer.innerHTML = `
                         <label>New Expiry Date:</label>
@@ -1378,6 +1385,14 @@ $actionItems = [
                         return;
                     }
                     values.adjustment = parseInt(adjustment);
+                    break;
+                case 'update_price':
+                    const newPrice = document.getElementById('newPrice').value;
+                    if (newPrice === '' || isNaN(newPrice) || parseFloat(newPrice) < 0) {
+                        alert('Please enter a valid price');
+                        return;
+                    }
+                    values.price = parseFloat(newPrice);
                     break;
                 case 'update_expiry':
                     const expiryDate = document.getElementById('newExpiryDate').value;

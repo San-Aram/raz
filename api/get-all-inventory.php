@@ -19,7 +19,7 @@ try {
     
     // Get all products
     $stmt = $db->query("
-        SELECT id, product_name as name, quantity, expiry_date, low_stock_threshold, 'products' as category
+        SELECT id, product_name as name, price, quantity, expiry_date, low_stock_threshold, 'products' as category
         FROM products 
         ORDER BY product_name
     ");
@@ -28,7 +28,7 @@ try {
     
     // Get all cosmetics
     $stmt = $db->query("
-        SELECT id, name, quantity, expiry_date, low_stock_threshold, 'cosmetics' as category
+        SELECT id, name, price, quantity, expiry_date, low_stock_threshold, 'cosmetics' as category
         FROM cosmetics 
         ORDER BY name
     ");
@@ -37,7 +37,7 @@ try {
     
     // Get all dental items
     $stmt = $db->query("
-        SELECT id, name, quantity, expiry_date, low_stock_threshold, 'dental' as category
+        SELECT id, name, price, quantity, expiry_date, low_stock_threshold, 'dental' as category
         FROM dental 
         ORDER BY name
     ");
