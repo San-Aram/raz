@@ -223,11 +223,8 @@ function initQuaggaScanner() {
         // Fill manual input field
         document.getElementById('manualBarcode').value = code;
         
-        // Process the barcode
+        // Process the barcode but keep scanning active so a subsequent detection may find a match
         processBarcode(code);
-        
-        // Stop scanning after successful detection
-        stopScanning();
     });
 }
 
@@ -288,9 +285,63 @@ function processBarcode(barcode = null) {
                 closeBarcodeScanner();
                 window.location.href = `${data.detail_page}?id=${data.product.id}`;
             } else {
-                // Product doesn't exist, open form to create new
-                closeBarcodeScanner();
-                openNewProductForm(barcodeValue, data.category);
+                // Product doesn't exist — show create button while keeping scanner active
+                console.log('Product not found for barcode:', barcodeValue, 'category:', data.category);
+
+                let detectedArea = document.getElementById('detectedInfo');
+                if (!detectedArea) {
+                    detectedArea = document.createElement('div');
+                    detectedArea.id = 'detectedInfo';
+                    detectedArea.className = 'detected-info';
+                    const manualInput = document.querySelector('#barcodeModal .manual-input');
+                    if (manualInput && manualInput.parentNode) {
+                        manualInput.parentNode.insertBefore(detectedArea, manualInput.nextSibling);
+                    } else {
+                        const modalContent = document.querySelector('#barcodeModal .modal-content') || document.body;
+                        modalContent.appendChild(detectedArea);
+                    }
+                }
+
+                detectedArea.innerHTML = `
+                    <div class="alert alert-warning" style="margin-top:0.75rem">
+                        Product not found for barcode <strong>${barcodeValue}</strong>.
+                    </div>
+                    <div style="display:flex;gap:0.5rem;margin-top:0.5rem;align-items:center">
+                        <button id="createProductBtn" class="btn btn-success">Create product for ${barcodeValue}</button>
+                        <button id="clearDetectedBtn" class="btn btn-secondary">Clear</button>
+                        <small style="margin-left:0.5rem;color:#666">Scanner remains active to try again.</small>
+                    </div>
+                `;
+
+                const createBtn = document.getElementById('createProductBtn');
+                if (createBtn) {
+                    createBtn.onclick = function() {
+                        if (isCreatingProduct) return;
+                        isCreatingProduct = true;
+                        try {
+                            openNewProductForm(barcodeValue, data.category);
+                        } catch (error) {
+                            console.error('Error opening new product form:', error);
+                            alert('Error opening product form: ' + error.message);
+                        } finally {
+                            isCreatingProduct = false;
+                        }
+                    };
+                }
+
+                const clearBtn = document.getElementById('clearDetectedBtn');
+                if (clearBtn) {
+                    clearBtn.onclick = function() {
+                        const el = document.getElementById('detectedInfo');
+                        if (el) el.remove();
+                        const manual = document.getElementById('manualBarcode');
+                        if (manual) manual.value = '';
+                    };
+                }
+
+                if (typeof showAlert === 'function') {
+                    try { showAlert('No matching product found — you can create one for this barcode or continue scanning.', 'info'); } catch(e) { /* ignore */ }
+                }
             }
         } else {
             showAlert(data.message || 'Error processing barcode.', 'danger');

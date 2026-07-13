@@ -12,8 +12,45 @@ if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true) {
 }
 
 $error = '';
+$maxLoginAttempts = 5;
+$lockoutDurationMinutes = 15;
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+// Check for session expired error
+if (isset($_GET['error']) && $_GET['error'] === 'session_expired') {
+    $error = 'Your session has expired due to inactivity. Please log in again.';
+    // Clear the session expired cookie
+    setcookie('session_expired', '', time() - 3600, '/');
+}
+
+// Check for session expired error
+if (isset($_GET['error']) && $_GET['error'] === 'session_expired') {
+    $error = 'Your session has expired due to inactivity. Please log in again.';
+}
+
+// Initialize login attempts tracking if not exists
+if (!isset($_SESSION['login_attempts'])) {
+    $_SESSION['login_attempts'] = 0;
+    $_SESSION['login_attempt_time'] = null;
+}
+
+// Check if user is locked out due to too many attempts
+$isLockedOut = false;
+if ($_SESSION['login_attempts'] >= $maxLoginAttempts && $_SESSION['login_attempt_time']) {
+    $timeSinceFirstAttempt = time() - $_SESSION['login_attempt_time'];
+    $lockoutDurationSeconds = $lockoutDurationMinutes * 60;
+    
+    if ($timeSinceFirstAttempt < $lockoutDurationSeconds) {
+        $isLockedOut = true;
+        $minutesRemaining = ceil(($lockoutDurationSeconds - $timeSinceFirstAttempt) / 60);
+        $error = "Too many login attempts. Please try again in {$minutesRemaining} minute(s).";
+    } else {
+        // Reset attempts after lockout period
+        $_SESSION['login_attempts'] = 0;
+        $_SESSION['login_attempt_time'] = null;
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$isLockedOut) {
     require_once 'includes/database.php';
     require_once 'includes/admin-settings-helper.php';
     
@@ -35,6 +72,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['username'] = $user['username'];
             $_SESSION['user_role'] = $user['role'];
             $_SESSION['full_name'] = $user['full_name'] ?? $user['username'];
+            $_SESSION['user_login_time'] = time();
+
+            // Reset login attempts on successful login
+            $_SESSION['login_attempts'] = 0;
+            $_SESSION['login_attempt_time'] = null;
 
             logAuditEvent('seller_login_success', 'users', $user['id'], null, [
                 'role' => $user['role']
@@ -43,10 +85,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header('Location: seller-dashboard.php');
             exit;
         } else {
+            $_SESSION['login_attempts']++;
+            if (!$_SESSION['login_attempt_time']) {
+                $_SESSION['login_attempt_time'] = time();
+            }
+            
+            if ($_SESSION['login_attempts'] >= $maxLoginAttempts) {
+                $error = "Too many login attempts. Please try again in {$lockoutDurationMinutes} minute(s).";
+            } else {
+                $attemptsRemaining = $maxLoginAttempts - $_SESSION['login_attempts'];
+                $error = "Invalid credentials or you do not have seller access ({$attemptsRemaining} attempt(s) remaining).";
+            }
+            
             logAuditEvent('seller_login_failed', 'users', null, null, [
-                'username' => $username
+                'username' => $username,
+                'attempts' => $_SESSION['login_attempts']
             ], null, $username);
-            $error = 'Invalid credentials or you do not have seller access.';
         }
     }
 }
